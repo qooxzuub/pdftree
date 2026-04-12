@@ -1,16 +1,28 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "pdftree"
-version = "0.1.0"
+dynamic = [ "version" ]
 description = "Interactive TUI for exploring PDF object structure"
 requires-python = ">=3.10"
 dependencies = [
     "pikepdf>=10.0.0",
     "textual>=8.2.3",
     "rich>=14.2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+]
+dev = [
+    "pdftree[test]",
+    "black",
+    "isort",
 ]
 
 [project.scripts]
@@ -25,6 +37,9 @@ include = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/pdftree"]
 
+[tool.hatch.version]
+source = "vcs"
+
 [tool.isort]
 profile = "black"
 line_length = 99
@@ -32,3 +47,9 @@ line_length = 99
 [tool.black]
 line-length = 99
 target-version = ['py310']
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "--cov=src/pdftree --cov-report=term-missing"
+testpaths = ["tests"]
