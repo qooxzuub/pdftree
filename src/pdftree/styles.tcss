@@ -1,0 +1,68 @@
+#tree-pane {
+    width: 1fr;
+    height: 100%;
+    border-right: solid $primary;
+    padding: 1;
+}
+#right-pane {
+    width: 1fr;
+    height: 100%;
+}
+#breadcrumb {
+    width: 100%;
+    background: $boost;
+    padding: 1 2;
+    text-style: bold;
+    border-bottom: solid $primary;
+}
+#details-pane {
+    width: 100%;
+    height: 1fr;
+    padding: 1;
+    background: $surface;
+}
+#search-bar, #page-input {
+    dock: bottom;
+}
+HelpScreen {
+    align: center middle;
+    background: $background 50%;
+}
+#help-container {
+    width: 70;
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border: thick $primary;
+}
+PromptScreen {
+    align: center middle;
+    background: $background 50%;
+}
+#prompt-container {
+    width: 50;
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border: thick $primary;
+}
+#prompt-label {
+    padding-bottom: 1;
+    text-style: bold;
+}
+UnsavedChangesScreen {
+    align: center middle;
+    background: $background 50%;
+}
+#unsaved-prompt-container {
+    width: 40;
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border: thick $error;
+}
+#unsaved-label {
+    text-align: center;
+    text-style: bold;
+    color: $error;
+}
