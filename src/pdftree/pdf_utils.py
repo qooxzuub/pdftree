@@ -90,7 +90,6 @@ def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"
                 node_registry[pdf_obj.objgen] = new_node
 
 
-
 class JumpReference:
     """A safe wrapper to tell the UI that this node is a hyperlink to another node."""
 

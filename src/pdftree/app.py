@@ -124,13 +124,12 @@ class PDFTreeApp(App):
                 f"[red]Failed to format (might not be a content stream):[/red] {e}"
             )
 
-
     def do_jump_factory(self, tree, node):
         def jump():
             self._programmatic_move = True
             tree.select_node(node)
-        return jump
 
+        return jump
 
     # -------------------------------------------------------------------------
     # Prompt for save on quit
@@ -273,7 +272,6 @@ class PDFTreeApp(App):
                 f"[red]Error saving stream data:[/red] {e}"
             )
 
-
     # -------------------------------------------------------------------------
     # Save PDF
     # -------------------------------------------------------------------------
@@ -354,7 +352,9 @@ class PDFTreeApp(App):
 
     def _open_search_bar(self, direction_text: str) -> None:
         search_bar = self.query_one("#search-bar", SearchInput)
-        search_bar.placeholder = f"Search {direction_text}  —  Enter to jump · Esc to cancel"
+        search_bar.placeholder = (
+            f"Search {direction_text}  —  Enter to jump · Esc or ctrl+g to cancel"
+        )
         search_bar.display = True
         search_bar.focus()
 
@@ -457,11 +457,11 @@ class PDFTreeApp(App):
                 yield Label("Trailer", id="breadcrumb")
                 yield RichLog(id="details-pane", highlight=True, wrap=True, auto_scroll=False)
         yield SearchInput(
-            placeholder="Search nodes (Enter to jump, Esc to cancel)...",
+            placeholder="Search nodes (Enter to jump, Esc or ctrl+g to cancel)...",
             id="search-bar",
         )
         yield PageInput(
-            placeholder="Go to page (Enter to jump, Esc to cancel)...",
+            placeholder="Go to page (Enter to jump, Esc or ctrl+g to cancel)...",
             id="page-input",
         )
 
@@ -574,7 +574,6 @@ class PDFTreeApp(App):
     # Helpers
     # -------------------------------------------------------------------------
 
-
     def _startup_selection(self, tree: PDFTree) -> None:
         pages_node = get_node_by_path(tree, ["Trailer", "/Root", "/Pages"])
         if pages_node:
@@ -582,6 +581,7 @@ class PDFTreeApp(App):
             pages_node.expand()
             self.call_after_refresh(lambda: tree.select_node(pages_node))
             tree.focus()
+
 
 def main():
     if len(sys.argv) < 2 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:

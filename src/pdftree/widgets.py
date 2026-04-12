@@ -8,6 +8,7 @@ class PageInput(Input):
 
     BINDINGS = [
         Binding("escape", "app.cancel_page_jump", "Cancel", show=False),
+        Binding("ctrl+g", "app.cancel_page_jump", "Cancel", show=False),
     ]
 
 
@@ -47,4 +48,5 @@ class SearchInput(Input):
 
     BINDINGS = [
         Binding("escape", "app.cancel_search", "Cancel", show=False),
+        Binding("ctrl+g", "app.cancel_search", "Cancel", show=False),
     ]

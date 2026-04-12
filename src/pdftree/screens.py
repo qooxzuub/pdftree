@@ -7,6 +7,8 @@ from textual.widgets import Input, Label, Markdown
 HELP_TEXT = """\
 # Keybindings Explorer
 
+Press q or H or F1 to dismiss this window.
+
 | Key | Action |
 | --- | --- |
 | **F1** or **H** | Show/Hide this help menu |
@@ -36,6 +38,7 @@ class UnsavedChangesScreen(ModalScreen[bool]):
         Binding("y", "quit_anyway", "Quit"),
         Binding("n", "cancel", "Cancel"),
         Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+g", "cancel", "Cancel"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -57,6 +60,7 @@ class PromptScreen(ModalScreen[str | None]):
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+g", "cancel", "Cancel"),
     ]
 
     def __init__(self, title: str, default_placeholder: str = ""):
@@ -88,7 +92,9 @@ class HelpScreen(ModalScreen):
 
     BINDINGS = [
         Binding("escape", "dismiss", "Dismiss"),
+        Binding("ctrl+g", "dismiss", "Dismiss"),
         Binding("f1", "dismiss", "Dismiss"),
+        Binding("H", "dismiss", "Dismiss"),
         Binding("q", "dismiss", "Dismiss"),
     ]
 

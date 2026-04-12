@@ -1,6 +1,6 @@
 from rich.text import Text
-from textual.widgets.tree import TreeNode
 from textual.widgets import Tree as TextualTree
+from textual.widgets.tree import TreeNode
 
 
 def expand_to(node: TreeNode) -> None:
@@ -10,9 +10,11 @@ def expand_to(node: TreeNode) -> None:
         curr.expand()
         curr = curr.parent
 
+
 def get_node_name(node):
     label_str = node.label.plain if hasattr(node.label, "plain") else str(node.label)
     return label_str.split()[0]
+
 
 def get_node_by_path(tree: TextualTree, path_steps: list[str]) -> TreeNode | None:
     current_node = tree.root
@@ -26,6 +28,7 @@ def get_node_by_path(tree: TextualTree, path_steps: list[str]) -> TreeNode | Non
         if not found:
             return None
     return current_node
+
 
 def rebuild_stream_label(node: TreeNode, new_length: int | None = None) -> None:
     """Reconstruct a stream node's Text label with an updated byte count."""
