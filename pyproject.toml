@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pdftree"
+version = "0.1.0"
+description = "Interactive TUI for exploring PDF object structure"
+requires-python = ">=3.10"
+dependencies = [
+    "pikepdf>=10.0.0",
+    "textual>=8.2.3",
+    "rich>=14.2.0",
+]
+
+[project.scripts]
+pdftree = "pdftree.app:main"
