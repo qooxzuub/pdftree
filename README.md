@@ -1,8 +1,9 @@
 # **pdftree**
 
-<a href="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"><img align="right" width="50%" src="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"></a>
-
 A Text User Interface for inspecting and modifying PDF object structures. Built with Python, Textual, and pikepdf.
+
+<a href="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"><img align="center" width="100%" src="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"></a>
+
 
 ## **Features**
 
@@ -13,6 +14,8 @@ A Text User Interface for inspecting and modifying PDF object structures. Built 
 * **Stream Editing:** Press `e` on a stream node to extract it to a temporary file, open it in your local `$EDITOR`, and inject the saved changes back into the PDF.
 
 * **Stream Normalization:** Press `f` to format dense content streams, parsing the data to place one PDF operator per line.
+
+* **Stream and Image Extraction:** Press `s` to save an uncompressed stream to disk, or `x` to extract an image stream.
 
 * **Reference Navigation:** Follow object references (e.g., `/Parent`) via interactive links, or jump to specific pages using `g`.
 
@@ -61,6 +64,7 @@ You can press F1 or H at any time inside the app to bring up this cheat sheet.
 | **f** | Format/normalize stream content |
 | **e** | Edit stream content in `$EDITOR` |
 | **w** | Save the modified PDF to disk |
+| **x** | Extract image to disk |
 | **Enter** | Follow link / Open stream |
 | **Ctrl+Z** | Suspend process |
 | **Ctrl+L** | Force screen redraw |
