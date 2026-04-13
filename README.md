@@ -1,5 +1,7 @@
 # **pdftree**
 
+<a href="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"><img align="right" width="50%" src="https://raw.githubusercontent.com/qooxzuub/pdftree/main/.github/assets/screenshot.png"></a>
+
 A Text User Interface for inspecting and modifying PDF object structures. Built with Python, Textual, and pikepdf.
 
 ## **Features**
