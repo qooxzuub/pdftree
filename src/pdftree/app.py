@@ -4,6 +4,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import signal
 
 import pikepdf
 from rich.text import Text
@@ -63,6 +64,11 @@ class PDFTreeApp(App):
         self._programmatic_move: bool = False
         self.obj_to_node: dict[tuple[int, int], TreeNode] = {}
         self.is_dirty: bool = False
+
+    def action_suspend_process(self) -> None:
+        with self.suspend():
+            print("\033[999;1H\n", end="", flush=True)
+            os.kill(os.getpid(), signal.SIGTSTP)  # SIGTSTP not SIGSTOP
 
     # -------------------------------------------------------------------------
     # Extract Image

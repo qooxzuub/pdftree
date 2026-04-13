@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
                  /headings -->
 
+## [0.2.0] - 2026-04-13
+
+### Added
+
+- Extract image
+
+### Fixed
+
+- Reposition cursor before suspending
+
 ## [0.1.0] - 2026-04-12
 
 ### Added
