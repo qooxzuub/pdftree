@@ -38,6 +38,7 @@ class PDFTreeApp(App):
         Binding("e", "edit_stream", "Edit Stream (e)", show=True),
         Binding("f", "normalize_stream", "Format Stream (f)", show=True),
         Binding("w", "save_pdf", "Save PDF (w)", show=True),
+        Binding("x", "extract_image", "Extract image (x)", show=True),
         Binding("ctrl+c", "quit", "Quit", show=True),
         Binding("ctrl+z", "suspend_process", "Suspend", show=True),
         Binding("ctrl+l", "redraw_screen", "Redraw", show=False),
@@ -62,6 +63,65 @@ class PDFTreeApp(App):
         self._programmatic_move: bool = False
         self.obj_to_node: dict[tuple[int, int], TreeNode] = {}
         self.is_dirty: bool = False
+
+    # -------------------------------------------------------------------------
+    # Extract Image
+    # -------------------------------------------------------------------------
+
+    def action_extract_image(self) -> None:
+        """Prompt to extract the currently selected image stream."""
+        tree = self.query_one("#tree-pane", PDFTree)
+        node = tree.cursor_node
+
+        if node is None or not isinstance(node.data, pikepdf.Stream):
+            self.query_one("#breadcrumb", Label).update(
+                "[yellow]Please select a Stream node (Red) to extract.[/yellow]"
+            )
+            return
+
+        # Ensure it is actually an image stream
+        if node.data.get("/Subtype") != "/Image":
+            self.query_one("#breadcrumb", Label).update(
+                "[yellow]Selected stream is not an image (/Subtype is not /Image).[/yellow]"
+            )
+            return
+
+        self._pending_export_node = node
+
+        # We prompt for a prefix because pikepdf appends the correct extension automatically
+        self.push_screen(
+            PromptScreen("Image file prefix (extension added automatically):", "image_out"),
+            self._extract_image_callback,
+        )
+
+    def _extract_image_callback(self, fileprefix: str | None) -> None:
+        """Callback fired when the Extract Image PromptScreen is dismissed."""
+        if not fileprefix:
+            return  # User canceled or entered an empty string
+
+        node = getattr(self, "_pending_export_node", None)
+        if node is None or not isinstance(node.data, pikepdf.Stream):
+            return
+
+        try:
+            from pikepdf.models import PdfImage
+
+            # Wrap the stream in the PdfImage helper
+            pdf_img = PdfImage(node.data)
+
+            # extract_to saves the file and returns the actual path (e.g., 'image_out.jpg')
+            saved_path = pdf_img.extract_to(fileprefix=fileprefix)
+
+            self.query_one("#breadcrumb", Label).update(
+                f"[green]Successfully extracted image to '{saved_path}'[/green]"
+            )
+        except ImportError:
+            # pikepdf requires the Pillow library for advanced image manipulation
+            self.query_one("#breadcrumb", Label).update(
+                "[red]Pillow is required for image extraction. Run: pip install Pillow[/red]"
+            )
+        except Exception as e:
+            self.query_one("#breadcrumb", Label).update(f"[red]Failed to extract image:[/red] {e}")
 
     # -------------------------------------------------------------------------
     # Normalize stream

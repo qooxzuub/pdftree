@@ -19,11 +19,12 @@ Press q or H or F1 to dismiss this window.
 | **j** / **k** / **↓** / **↑** | Navigate tree vertically |
 | **h** / **←** | Collapse node / Jump to parent |
 | **l** / **→** | Expand node / Jump to first child |
-| **g** | Go to page... |
-| **s** | Save stream content... |
+| **g** | Go to page |
+| **s** | Save stream content |
 | **f** | Format/normalize stream content |
 | **e** | Edit stream content |
 | **w** | Write PDF file to disk |
+| **x** | Extract image to disk |
 | **Enter** | Follow link / Open stream |
 | **Ctrl+Z** | Suspend process |
 | **Ctrl+L** | Force screen redraw |

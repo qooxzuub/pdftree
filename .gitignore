@@ -3,3 +3,7 @@
 .\#*
 __pycache__
 .coverage
+*.png
+*.jpg
+*.jpeg
+*.script
