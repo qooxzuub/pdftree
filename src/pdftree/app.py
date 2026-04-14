@@ -1,10 +1,10 @@
 import os
 import pathlib
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
-import signal
 
 import pikepdf
 from rich.text import Text

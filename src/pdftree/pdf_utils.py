@@ -1,6 +1,10 @@
+from collections import deque
+
 import pikepdf
 from rich.text import Text
 from textual.widgets.tree import TreeNode
+
+# ... [keep sort_pdf_keys exactly as it is] ...
 
 
 def sort_pdf_keys(item):
@@ -21,11 +25,12 @@ def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"
     if node_registry is None:
         node_registry = {}
 
-    # Stack items: (pdf_obj, parent_tree_node, name)
-    stack = [(pdf_root, tree_root, name)]
+    # USE A QUEUE INSTEAD OF A STACK FOR BREADTH-FIRST SEARCH
+    queue = deque([(pdf_root, tree_root, name)])
 
-    while stack:
-        pdf_obj, parent_node, current_name = stack.pop()
+    while queue:
+        # Pop from the left to process level-by-level
+        pdf_obj, parent_node, current_name = queue.popleft()
 
         obj_label_text = ""
         is_ind = getattr(pdf_obj, "is_indirect", False)
@@ -44,16 +49,17 @@ def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"
 
         if isinstance(pdf_obj, pikepdf.Dictionary):
             label.append(current_name, style="bold blue")
-            if obj_label_text:  # the "(Obj N:M)" part
+            if obj_label_text:
                 label.append(f" {obj_label_text}", style="dim yellow")
             label.append(f" Dict[{len(pdf_obj)}]", style="dim")
             new_node = parent_node.add(label, data=pdf_obj)
 
             if is_ind:
                 node_registry[pdf_obj.objgen] = new_node
-            # Push children in reverse so they're processed in original order
-            for key, val in sorted(pdf_obj.items(), key=sort_pdf_keys, reverse=True):
-                stack.append((val, new_node, str(key)))
+
+            # REMOVED reverse=True - queue processes in normal FIFO order
+            for key, val in sorted(pdf_obj.items(), key=sort_pdf_keys):
+                queue.append((val, new_node, str(key)))
 
         elif isinstance(pdf_obj, pikepdf.Array):
             label.append(current_name, style="bold green")
@@ -62,8 +68,10 @@ def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"
             label.append(f" Array[{len(pdf_obj)}]", style="dim")
 
             new_node = parent_node.add(label, data=pdf_obj)
-            for i, val in reversed(list(enumerate(pdf_obj))):
-                stack.append((val, new_node, f"[{i}]"))
+
+            # REMOVED reversed() - queue processes in normal FIFO order
+            for i, val in enumerate(pdf_obj):
+                queue.append((val, new_node, f"[{i}]"))
 
         elif isinstance(pdf_obj, pikepdf.Stream):
             label.append(current_name, style="bold red")
@@ -74,8 +82,10 @@ def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"
 
             if is_ind:
                 node_registry[pdf_obj.objgen] = new_node
-            for key, val in sorted(pdf_obj.items(), key=sort_pdf_keys, reverse=True):
-                stack.append((val, new_node, str(key)))
+
+            # REMOVED reverse=True - queue processes in normal FIFO order
+            for key, val in sorted(pdf_obj.items(), key=sort_pdf_keys):
+                queue.append((val, new_node, str(key)))
 
         else:
             val_str = str(pdf_obj)
