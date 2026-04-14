@@ -623,16 +623,21 @@ class PDFTreeApp(App):
             )
             try:
                 raw_bytes = node_data.read_bytes()
-                try:
-                    log.write(raw_bytes.decode("utf-8"))
-                except UnicodeDecodeError:
-                    log.write(
-                        Text.from_markup(
-                            f"[bold red]<Binary Stream: {len(raw_bytes)} bytes>[/bold red]"
-                        )
+                text_content = raw_bytes.decode("utf-8", errors="backslashreplace")
+                if "\x00" in text_content[:100] and len(raw_bytes) > 1000:
+                    raise ValueError("Looks like raw binary (contains null bytes)")
+                header = ""
+                if len(text_content) > 100_000:
+                    header = "[Truncated to first 100_000 bytes]\n\n"
+                log.write(header + text_content[:100_000])
+            except (UnicodeDecodeError, ValueError):
+                log.write(
+                    Text.from_markup(
+                        f"[bold red]<Binary Stream: {len(raw_bytes)} bytes>[/bold red]"
                     )
-                    log.write(Text.from_markup("[dim]First 500 bytes as repr:[/dim]\n"))
-                    log.write(repr(raw_bytes[:500]))
+                )
+                log.write(Text.from_markup("[dim]First 5000 bytes as repr:[/dim]\n"))
+                log.write(repr(raw_bytes[:5000]))
             except Exception as e:
                 log.write(Text.from_markup(f"[bold red]Error reading stream:[/bold red] {e}"))
 
