@@ -1,11 +1,39 @@
-from .pdf_utils import TreeAdapter, JumpReference
 import html
+
+from collections import defaultdict
+
+from .pdf_utils import TreeAdapter, JumpReference
 
 
 class GtkAdapter(TreeAdapter):
     def __init__(self, store):
         self.store = store
         self.registry = {}
+        self.backlinks = defaultdict(set)
+
+    def get_iter_from_objgen_string(self, objgen_str):
+        """
+        Converts "10 0" or "Trailer" back into a Gtk.TreeIter.
+        Useful for jumping to a parent from the backlink list.
+        """
+        if objgen_str == "Trailer":
+            return self.store.get_iter_first()
+
+        try:
+            # Split "10 0" into (10, 0)
+            num, gen = map(int, objgen_str.split())
+            return self.registry.get((num, gen))
+        except (ValueError, AttributeError):
+            return None
+
+    def _get_og_label(self, pdf_obj, markup=True):
+        """Helper to format the (Obj N:G) string."""
+        if not getattr(pdf_obj, "is_indirect", False):
+            return ""
+        num, gen = pdf_obj.objgen
+        if markup:
+            return f" <span color='#c4a000'>(Obj {num}:{gen})</span>"
+        return f" (Obj {num}:{gen})"
 
     def create_node(self, parent_iter, pdf_obj, name, label_type):
         is_ind = getattr(pdf_obj, "is_indirect", False)
@@ -42,8 +70,14 @@ class GtkAdapter(TreeAdapter):
         return new_iter
 
     def create_jump(self, parent_iter, target_iter, name):
-        markup = f"<span color='gray'><i>↪ {name} (Jump)</i></span>"
-        raw_text = f"↪ {name} (Jump)"
+        # Peek at the target node to get its Object ID
+        target_obj = self.store[target_iter][1]
+        og_label = self._get_og_label(target_obj, markup=True)
+        og_raw = self._get_og_label(target_obj, markup=False)
+
+        markup = f"<span color='gray'><i>↪ {name} (Jump)</i></span>{og_label}"
+        raw_text = f"↪ {name} (Jump){og_raw}"
+
         target_path = self.store.get_path(target_iter)
         self.store.append(
             parent_iter, [markup, JumpReference(target_path), raw_text, name]
@@ -63,7 +97,7 @@ class GtkAdapter(TreeAdapter):
             self.store.set_value(ui_iter, 0, markup)
             self.store.set_value(ui_iter, 1, pdf_obj)
             self.store.set_value(ui_iter, 2, raw_text)
-            self.store.set_value(ui_iter, 2, name)
+            self.store.set_value(ui_iter, 3, name)
         else:
             markup = f"<span color='gray'><i>↪ {name} (Jump)</i></span>"
             raw_text = f"↪ {name} (Jump)"

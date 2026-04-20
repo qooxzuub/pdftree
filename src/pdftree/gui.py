@@ -85,8 +85,13 @@ class PDFTreeGUI(Gtk.Window):
         sw_meta = Gtk.ScrolledWindow()
         sw_meta.add(self.metadata_view)
         self.right_paned.pack1(sw_meta, False, False)
-        self.right_paned.set_position(100)
+        self.right_paned.set_position(100)  # Or whatever height you prefer
 
+        # Content Stack (Swaps between Text and Image)
+        self.content_stack = Gtk.Stack()
+        self.content_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+
+        # 1. Text View (Page)
         self.content_view = Gtk.TextView()
         self.content_view.set_editable(False)
         css_provider = Gtk.CssProvider()
@@ -96,8 +101,16 @@ class PDFTreeGUI(Gtk.Window):
         )
         sw_content = Gtk.ScrolledWindow()
         sw_content.add(self.content_view)
-        self.right_paned.pack2(sw_content, True, False)
+        self.content_stack.add_named(sw_content, "text")
 
+        # 2. Image View (Page)
+        self.image_view = Gtk.Image()
+        sw_image = Gtk.ScrolledWindow()
+        sw_image.add(self.image_view)
+        self.content_stack.add_named(sw_image, "image")
+
+        self.right_paned.pack2(self.content_stack, True, False)
+        self.content_stack.show_all()
         self.paned.pack2(right_vbox, True, True)
 
         # Search State

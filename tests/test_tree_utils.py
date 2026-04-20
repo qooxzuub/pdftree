@@ -304,7 +304,9 @@ class TestBuildTree:
             assert len(objgen) == 2
 
     @pytest.mark.asyncio
-    async def test_jump_reference_created_for_repeated_object(self, tree_app, simple_pdf):
+    async def test_jump_reference_created_for_repeated_object(
+        self, tree_app, simple_pdf
+    ):
         """/Parent back-references should become JumpReference nodes."""
         app, _ = tree_app
         tree = app.query_one("#tree", Tree)
@@ -346,9 +348,9 @@ class TestBuildTree:
             parent_name = get_node_name(node.parent) if node.parent else ""
             # Each stream is either named /Contents directly or is a child of /Contents
             node_n = get_node_name(node)
-            assert (
-                node_n == "/Contents" or parent_name == "/Contents"
-            ), f"Unexpected stream node: name={node_n}, parent={parent_name}"
+            assert node_n == "/Contents" or parent_name == "/Contents", (
+                f"Unexpected stream node: name={node_n}, parent={parent_name}"
+            )
 
     @pytest.mark.asyncio
     async def test_xobject_form_stream_present(self, tree_app, xobject_pdf):

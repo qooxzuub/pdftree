@@ -95,9 +95,13 @@ async def test_format_stream(simple_pdf):
 
     async with app.run_test() as pilot:
         tree = app.query_one("#tree-pane", PDFTree)
-        stream_node = next(n for n in iter_nodes(tree.root) if isinstance(n.data, pikepdf.Stream))
+        stream_node = next(
+            n for n in iter_nodes(tree.root) if isinstance(n.data, pikepdf.Stream)
+        )
 
-        with patch("textual.widgets.Tree.cursor_node", new_callable=PropertyMock) as mock_cursor:
+        with patch(
+            "textual.widgets.Tree.cursor_node", new_callable=PropertyMock
+        ) as mock_cursor:
             mock_cursor.return_value = stream_node
 
             # Press 'f' to format while the mock is active
@@ -130,9 +134,13 @@ async def test_edit_stream(simple_pdf, monkeypatch):
 
     async with app.run_test() as pilot:
         tree = app.query_one("#tree-pane", PDFTree)
-        stream_node = next(n for n in iter_nodes(tree.root) if isinstance(n.data, pikepdf.Stream))
+        stream_node = next(
+            n for n in iter_nodes(tree.root) if isinstance(n.data, pikepdf.Stream)
+        )
 
-        with patch("textual.widgets.Tree.cursor_node", new_callable=PropertyMock) as mock_cursor:
+        with patch(
+            "textual.widgets.Tree.cursor_node", new_callable=PropertyMock
+        ) as mock_cursor:
             mock_cursor.return_value = stream_node
 
             await pilot.press("e")

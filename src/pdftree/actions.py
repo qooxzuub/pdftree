@@ -1,14 +1,44 @@
+import os
 import gi
-
+import subprocess
+import shlex
+import tempfile
 
 import pikepdf
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
+
 class ActionHandler:
     def __init__(self, app):
         self.app = app
+
+    def _show_info(self, title, message):
+        """Helper for quick GUI info alerts."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.app,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=title,
+        )
+        dialog.format_secondary_text(message)
+        dialog.run()
+        dialog.destroy()
+
+    def _show_error(self, title, message):
+        """Helper for quick GUI error alerts."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.app,
+            flags=0,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text=title,
+        )
+        dialog.format_secondary_text(message)
+        dialog.run()
+        dialog.destroy()
 
     def get_selected_pdf_obj(self):
         """Helper to get the currently selected object in the tree."""
@@ -120,70 +150,9 @@ class ActionHandler:
                     valid = treeiter is not None
 
         except Exception as e:
-            dialog = Gtk.MessageDialog(
-                transient_for=self.app,
-                flags=0,
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Deletion Failed",
-            )
-            dialog.format_secondary_text(str(e))
-            dialog.run()
-            dialog.destroy()
+            self._show_error("Deletion Failed", str(e))
 
         self.app.tree_view.get_selection().emit("changed")
-
-
-    def action_extract(self, widget):
-        """Extracts the selected Stream or Image to a file."""
-        obj = self.get_selected_pdf_obj()
-        if not isinstance(obj, pikepdf.Stream):
-            print("Selected object is not a stream.")
-            return
-
-        dialog = Gtk.FileChooserDialog(
-            title="Extract Stream To...",
-            parent=self.app,
-            action=Gtk.FileChooserAction.SAVE,
-        )
-        dialog.add_buttons(
-            Gtk.STOCK_CANCEL,
-            Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_SAVE,
-            Gtk.ResponseType.ACCEPT,
-        )
-        dialog.set_do_overwrite_confirmation(True)
-
-        # Try to guess extension
-        ext = ".bin"
-        if str(obj.get("/Subtype", "")) == "/Image":
-            filter_name = str(obj.get("/Filter", ""))
-            if "DCTDecode" in filter_name:
-                ext = ".jpg"
-            elif "FlateDecode" in filter_name:
-                ext = ".png"  # (Requires extra handling for raw PNG bytes, but close enough for now)
-        dialog.set_current_name(f"extracted_stream{ext}")
-
-        if dialog.run() == Gtk.ResponseType.ACCEPT:
-            try:
-                with open(dialog.get_filename(), "wb") as f:
-                    f.write(obj.read_bytes())
-                print("Stream extracted!")
-            except Exception as e:
-                print(f"Failed to extract stream: {e}")
-
-        dialog.destroy()
-
-    # ==========================================
-    # ACTION HANDLERS (To be implemented)
-    # ==========================================
-
-    def action_edit(self, widget):
-        obj = self.get_selected_pdf_obj()
-        print(f"TODO: Edit object of type {type(obj).__name__}")
-
-    def action_normalize(self, widget):
-        print("TODO: Normalize stream")
 
     def action_jump_page(self, widget):
         """Prompts for a page number and jumps the tree to that PDF Dictionary."""
@@ -213,16 +182,7 @@ class ActionHandler:
 
         # Helper function for GUI error messages
         def show_error(message):
-            err_dialog = Gtk.MessageDialog(
-                transient_for=self.app,
-                flags=0,
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Invalid Input",
-            )
-            err_dialog.format_secondary_text(message)
-            err_dialog.run()
-            err_dialog.destroy()
+            self._show_error("Invalid Input", message)
 
         # 2. Process the input
         if response == Gtk.ResponseType.OK:
@@ -284,3 +244,140 @@ class ActionHandler:
             self.app.tree_view.set_cursor(pages_path, None, False)
             # Scroll so the /Pages node is exactly in the middle of the screen
             self.app.tree_view.scroll_to_cell(pages_path, None, True, 0.5, 0.0)
+
+    def action_extract(self, widget):
+        """Extracts the selected Stream or Image to a file."""
+        obj = self.get_selected_pdf_obj()
+        if not isinstance(obj, pikepdf.Stream):
+            self._show_error("Invalid Selection", "Selected object is not a stream.")
+            return
+
+        is_image = str(obj.get("/Subtype", "")) == "/Image"
+
+        dialog = Gtk.FileChooserDialog(
+            title="Extract Image (Provide Prefix)"
+            if is_image
+            else "Extract Stream To...",
+            parent=self.app,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL,
+            Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE,
+            Gtk.ResponseType.ACCEPT,
+        )
+        dialog.set_do_overwrite_confirmation(True)
+
+        if is_image:
+            # PdfImage will append the correct extension (e.g., .jpg, .png)
+            dialog.set_current_name("extracted_image")
+        else:
+            dialog.set_current_name("extracted_stream.bin")
+
+        if dialog.run() == Gtk.ResponseType.ACCEPT:
+            filepath = dialog.get_filename()
+
+            if is_image:
+                try:
+                    from pikepdf.models import PdfImage
+
+                    pdf_img = PdfImage(obj)
+                    saved_path = pdf_img.extract_to(fileprefix=filepath)
+                    self._show_info(
+                        "Success", f"Image successfully extracted to:\n{saved_path}"
+                    )
+                except ImportError:
+                    self._show_error(
+                        "Missing Dependency",
+                        "Pillow is required for image extraction. Run: pip install Pillow",
+                    )
+                except Exception as e:
+                    self._show_error("Extraction Failed", str(e))
+            else:
+                try:
+                    raw_bytes = obj.read_bytes()
+                    with open(filepath, "wb") as f:
+                        f.write(raw_bytes)
+                    self._show_info(
+                        "Success", f"Saved {len(raw_bytes)} bytes to:\n{filepath}"
+                    )
+                except Exception as e:
+                    self._show_error("Export Failed", str(e))
+
+        dialog.destroy()
+
+    def action_edit(self, widget):
+        """Dumps stream to a temp file, opens in $EDITOR, and writes back on close."""
+        obj = self.get_selected_pdf_obj()
+        if not isinstance(obj, pikepdf.Stream):
+            self._show_error(
+                "Invalid Selection", "Currently, only Stream editing is supported."
+            )
+            return
+
+        editor_env = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not editor_env:
+            self._show_error(
+                "No Editor Set",
+                "Please set the $EDITOR environment variable before running.\n"
+                "Example: export EDITOR=nano  (or 'code --wait')",
+            )
+            return
+
+        try:
+            # 1. Dump to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as tmp:
+                tmp.write(obj.read_bytes())
+                temp_path = tmp.name
+
+            # 2. Parse editor command and wait for it to finish
+            editor_cmd = shlex.split(editor_env) + [temp_path]
+            subprocess.run(editor_cmd, check=True)
+
+            # 3. Read the modified bytes back
+            with open(temp_path, "rb") as f:
+                new_bytes = f.read()
+
+            # 4. Write back if changed and update the UI
+            if new_bytes != obj.read_bytes():
+                obj.write(new_bytes)
+                self.app.tree_view.get_selection().emit("changed")
+
+            # Clean up
+            os.remove(temp_path)
+
+        except Exception as e:
+            self._show_error("Edit Failed", str(e))
+
+    def action_normalize(self, widget):
+        """Parses and unparses a content stream to format operators to one-per-line."""
+        obj = self.get_selected_pdf_obj()
+        if not isinstance(obj, pikepdf.Stream):
+            self._show_error(
+                "Invalid Selection", "Please select a stream to normalize."
+            )
+            return
+
+        try:
+            parsed = pikepdf.parse_content_stream(obj)
+            normalized_bytes = pikepdf.unparse_content_stream(parsed)
+            old_bytes = obj.read_bytes()
+
+            if normalized_bytes != old_bytes:
+                obj.write(normalized_bytes)
+                self._show_info(
+                    "Stream Normalized",
+                    f"Successfully formatted stream.\nLength: {len(old_bytes)} -> {len(normalized_bytes)} bytes.",
+                )
+                # Re-emit selection to update the right-side content pane automatically
+                self.app.tree_view.get_selection().emit("changed")
+            else:
+                self._show_info(
+                    "Unchanged", "Stream is already formatted or unchanged."
+                )
+        except Exception as e:
+            self._show_error(
+                "Normalization Failed",
+                f"This might not be a valid content stream:\n{str(e)}",
+            )

@@ -7,6 +7,7 @@ import pikepdf
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk  # noqa: E402
 
+
 class EventHandler:
     def __init__(self, app):
         self.app = app
@@ -44,10 +45,15 @@ class EventHandler:
     def on_tree_key_press(self, widget, event):
         keyname = Gdk.keyval_name(event.keyval)
         # 1. Search shortcut (Ctrl+F)
-        if (event.state & Gdk.ModifierType.CONTROL_MASK) and event.keyval in (
-            Gdk.KEY_f,
-            Gdk.KEY_F,
-        ) or event.keyval == Gdk.KEY_slash:
+        if (
+            (event.state & Gdk.ModifierType.CONTROL_MASK)
+            and event.keyval
+            in (
+                Gdk.KEY_f,
+                Gdk.KEY_F,
+            )
+            or event.keyval == Gdk.KEY_slash
+        ):
             self.app.search_bar.set_search_mode(True)
             self.app.search_entry.grab_focus()
             return True
@@ -83,15 +89,14 @@ class EventHandler:
                 elif len(path) > 1:
                     self.app.tree_view.set_cursor(path[:-1], None, False)
                 return True
-            
+
         elif keyname == "j":
             self.app.tree_view.emit("move-cursor", Gtk.MovementStep.DISPLAY_LINES, 1)
             return True
-            
+
         elif keyname == "k":
             self.app.tree_view.emit("move-cursor", Gtk.MovementStep.DISPLAY_LINES, -1)
             return True
-
 
         return False
 
@@ -155,19 +160,64 @@ class EventHandler:
         meta_buf = self.app.metadata_view.get_buffer()
         content_buf = self.app.content_view.get_buffer()
 
-        meta_buf.set_text(f"Type: {type(pdf_obj).__name__}\nRepr: {str(pdf_obj)[:200]}")
+        meta_text = f"Type: {type(pdf_obj).__name__}\nRepr: {str(pdf_obj)[:200]}"
+
+        # Add Backlinks Logic
+        if hasattr(pdf_obj, "objgen") and pdf_obj.is_indirect:
+            links = self.app.adapter.backlinks.get(pdf_obj.objgen, [])
+            if links:
+                meta_text += "\n--- Referenced By ---\n"
+                for source_id, key in sorted(links):
+                    meta_text += f"• {source_id} via {key}\n"
+
+        meta_buf.set_text(meta_text)
         content_buf.set_text("")  # Clear content by default
 
         if isinstance(pdf_obj, pikepdf.Stream):
             try:
-                # Add full dictionary to metadata, uncompressed bytes to content
                 meta_buf.set_text(f"Stream Dictionary:\n{str(pdf_obj)}")
-                content = pdf_obj.read_bytes().decode("utf-8", errors="replace")
-                content_buf.set_text(content)
+
+                # --- IMAGE PREVIEW ROUTINE ---
+                if str(pdf_obj.get("/Subtype", "")) == "/Image":
+                    try:
+                        from pikepdf.models import PdfImage
+                        from gi.repository import GdkPixbuf
+                        import io
+
+                        # Convert PDF stream -> PIL Image -> PNG Bytes -> Gdk Pixbuf
+                        pdf_img = PdfImage(pdf_obj)
+                        pil_img = pdf_img.as_pil_image()
+
+                        byte_stream = io.BytesIO()
+                        pil_img.save(byte_stream, format="PNG")
+                        byte_stream.seek(0)
+
+                        loader = GdkPixbuf.PixbufLoader.new_with_type("png")
+                        loader.write(byte_stream.read())
+                        loader.close()
+
+                        self.app.image_view.set_from_pixbuf(loader.get_pixbuf())
+                        self.app.content_stack.set_visible_child_name("image")
+                    except Exception as e:
+                        content_buf.set_text(
+                            f"Image preview failed (ensure Pillow is installed):\n{e}"
+                        )
+                        self.app.content_stack.set_visible_child_name("text")
+
+                # --- TEXT PREVIEW ROUTINE ---
+                else:
+                    content = pdf_obj.read_bytes().decode("utf-8", errors="replace")
+                    content_buf.set_text(content)
+                    self.app.content_stack.set_visible_child_name("text")
+
             except Exception as e:
                 content_buf.set_text(f"Error reading stream: {e}")
+                self.app.content_stack.set_visible_child_name("text")
+
         elif isinstance(pdf_obj, JumpReference):
             meta_buf.set_text(
                 "Jump Reference\nFollows an indirect object reference to another part of the tree.\n"
                 + "Double-click or press Enter to follow link."
             )
+
+            self.app.content_stack.set_visible_child_name("text")
