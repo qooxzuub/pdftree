@@ -57,176 +57,79 @@ class DeferredJumpReference:
         self.original_name = original_name
 
 
-# -------------------------------------------------------------------------
-# Node Type Handlers
-# -------------------------------------------------------------------------
+class TreeAdapter:
+    """Interface to be implemented by TUI and GUI."""
+    def create_node(self, parent, pdf_obj, name, label_type): pass
+    def create_jump(self, parent, target_node, name): pass
+    def create_deferred(self, parent, pdf_obj, name): pass
+    def resolve_deferred(self, deferred_node, target_node, name, is_orphan): pass
 
-
-def _handle_dictionary(pdf_obj, parent_node, name, obj_label, is_ind, stack, registry):
-    label = Text()
-    label.append(name, style="bold blue")
-    if obj_label:
-        label.append(f" {obj_label}", style="dim yellow")
-    label.append(f" Dict[{len(pdf_obj)}]", style="dim")
-
-    new_node = parent_node.add(label, data=pdf_obj)
-    if is_ind:
-        registry[pdf_obj.objgen] = new_node
-
-    for key, val in reversed(sorted(pdf_obj.items(), key=sort_pdf_keys)):
-        stack.append((val, new_node, str(key), False))
-
-
-def _handle_array(pdf_obj, parent_node, name, obj_label, stack):
-    label = Text()
-    label.append(name, style="bold green")
-    if obj_label:
-        label.append(f" {obj_label}", style="dim yellow")
-    label.append(f" Array[{len(pdf_obj)}]", style="dim")
-
-    new_node = parent_node.add(label, data=pdf_obj)
-    is_kids_array = name == "/Kids"
-
-    for i, val in reversed(list(enumerate(pdf_obj))):
-        stack.append((val, new_node, f"[{i}]", is_kids_array))
-
-
-def _handle_stream(pdf_obj, parent_node, name, obj_label, is_ind, stack, registry):
-    label = Text()
-    label.append(name, style="bold red")
-    if obj_label:
-        label.append(f" {obj_label}", style="dim yellow")
-    label.append(" Stream", style="dim")
-
-    new_node = parent_node.add(label, data=pdf_obj)
-    if is_ind:
-        registry[pdf_obj.objgen] = new_node
-
-    for key, val in reversed(sorted(pdf_obj.items(), key=sort_pdf_keys)):
-        stack.append((val, new_node, str(key), False))
-
-
-def _handle_primitive(pdf_obj, parent_node, name, obj_label, is_ind, registry):
-    val_str = str(pdf_obj)
-    if len(val_str) > 60:
-        val_str = val_str[:57] + "..."
-
-    label = Text()
-    label.append(name, style="bold cyan")
-    if is_ind:
-        label.append(f" {obj_label}", style="dim yellow")
-    label.append(f": {val_str}")
-
-    new_node = parent_node.add_leaf(label, data=pdf_obj)
-    if is_ind:
-        registry[pdf_obj.objgen] = new_node
-
-
-# -------------------------------------------------------------------------
-# Processing Flow Helpers
-# -------------------------------------------------------------------------
-
-
-def _process_node(pdf_obj, parent_node, name, is_kid, stack, registry, deferred_nodes):
-    """Processes a single PDF object, handling jumps, defers, and routing to type handlers."""
-    is_ind = getattr(pdf_obj, "is_indirect", False)
-    obj_label = f"(Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})" if is_ind else ""
-
-    if is_ind:
-        # 1. Existing object? Create a standard jump reference.
-        if pdf_obj.objgen in registry:
-            label = Text.from_markup(
-                f"[dim underline italic]{name}: ↪ Jump to Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]"
-            )
-            parent_node.add_leaf(label, data=JumpReference(registry[pdf_obj.objgen]))
-            return
-
-        # 2. Page dictionary not inside /Kids? Defer it.
-        obj_type = pdf_obj.get("/Type") if isinstance(pdf_obj, pikepdf.Dictionary) else None
-        if str(obj_type) == "/Page" and not is_kid:
-            label = Text.from_markup(
-                f"[dim underline italic]{name}: ↪ [Deferred] Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]"
-            )
-            new_node = parent_node.add(label, data=DeferredJumpReference(pdf_obj, name))
-            deferred_nodes.append(new_node)
-            return
-
-    # Route to the specific type handler
-    if isinstance(pdf_obj, pikepdf.Dictionary):
-        _handle_dictionary(pdf_obj, parent_node, name, obj_label, is_ind, stack, registry)
-    elif isinstance(pdf_obj, pikepdf.Array):
-        _handle_array(pdf_obj, parent_node, name, obj_label, stack)
-    elif isinstance(pdf_obj, pikepdf.Stream):
-        _handle_stream(pdf_obj, parent_node, name, obj_label, is_ind, stack, registry)
-    else:
-        _handle_primitive(pdf_obj, parent_node, name, obj_label, is_ind, registry)
-
-
-def _resolve_orphans(deferred_nodes, registry, stack) -> bool:
-    """Processes deferred nodes. Returns True if unresolved orphans were found."""
-    unresolved_orphans = False
-
-    # Copy and clear so we can safely iterate
-    current_deferred = deferred_nodes[:]
-    deferred_nodes.clear()
-
-    for node in current_deferred:
-        data = node.data
-        pdf_obj = data.pdf_obj
-
-        if pdf_obj.objgen in registry:
-            # Happy path: The page was successfully built by the /Kids array
-            label = Text.from_markup(
-                f"[dim underline italic]{data.original_name}: ↪ Jump to Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]"
-            )
-            node.set_label(label)
-            node.data = JumpReference(registry[pdf_obj.objgen])
-            node.allow_expand = False
-        else:
-            # Orphan path: The page is broken and missing from /Kids
-            unresolved_orphans = True
-            registry[pdf_obj.objgen] = node
-            node.data = pdf_obj
-
-            # Revert the label to look like a standard dictionary
-            label = Text()
-            label.append(data.original_name, style="bold blue")
-            label.append(f" (Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})", style="dim yellow")
-            label.append(f" Dict[{len(pdf_obj)}]", style="dim")
-
-            node.set_label(label)
-            node.allow_expand = True
-
-            # Push its children onto the stack to resume DFS
-            for key, val in reversed(sorted(pdf_obj.items(), key=sort_pdf_keys)):
-                stack.append((val, node, str(key), False))
-
-    return unresolved_orphans
-
-
-# -------------------------------------------------------------------------
-# Main Entry Point
-# -------------------------------------------------------------------------
-
-
-def build_tree(pdf_root, tree_root: TreeNode, node_registry=None, name="Trailer"):
-    if node_registry is None:
-        node_registry = {}
-
-    deferred_nodes = []
-    stack = [(pdf_root, tree_root, name, False)]
+def walk_pdf(pdf_root, adapter, name="Trailer"):
+    registry = {}  # objgen -> UI Node handle
+    deferred = []  # List of (UI handle, pdf_obj, name)
+    stack = [(pdf_root, None, name, False)] # (obj, ui_parent, name, is_kid)
 
     while True:
-        # Phase 1: Build down the tree
+        # --- PHASE 1: Build down the tree ---
         while stack:
-            pdf_obj, parent_node, current_name, is_kid = stack.pop()
-            _process_node(
-                pdf_obj, parent_node, current_name, is_kid, stack, node_registry, deferred_nodes
-            )
+            obj, parent_ui, n, is_kid = stack.pop()
+            is_ind = getattr(obj, "is_indirect", False)
 
-        # Phase 2: Post-processing and orphan recovery
-        found_orphans = _resolve_orphans(deferred_nodes, node_registry, stack)
+            # 1. Handle Jumps (Cycles)
+            if is_ind and obj.objgen in registry:
+                adapter.create_jump(parent_ui, registry[obj.objgen], n)
+                continue
 
-        # If no orphans were found, the stack remains empty and we are done.
-        if not found_orphans:
+            # 2. Handle Deferred (Matching your _process_node logic)
+            obj_type = obj.get("/Type") if isinstance(obj, pikepdf.Dictionary) else None
+            if is_ind and str(obj_type) == "/Page" and not is_kid:
+                # Instead of adding a node directly, we let the adapter create a placeholder
+                ui_handle = adapter.create_deferred(parent_ui, obj, n)
+                deferred.append((ui_handle, obj, n))
+                continue
+
+            # 3. Create Standard Node
+            if isinstance(obj, pikepdf.Dictionary):
+                node_type = "Dictionary"
+            elif isinstance(obj, pikepdf.Array):
+                node_type = "Array"
+            elif isinstance(obj, pikepdf.Stream):
+                node_type = "Stream"
+            else:
+                node_type = type(obj).__name__
+            ui_handle = adapter.create_node(parent_ui, obj, n, node_type)
+            if is_ind:
+                registry[obj.objgen] = ui_handle
+
+            # 4. Discovery (Push children to stack)
+            if isinstance(obj, (pikepdf.Dictionary, pikepdf.Stream)):
+                # Uses your sort_pdf_keys helper
+                for key, val in reversed(sorted(obj.items(), key=sort_pdf_keys)):
+                    stack.append((val, ui_handle, str(key), False))
+            elif isinstance(obj, pikepdf.Array):
+                is_kids_array = (n == "/Kids")
+                for i, val in reversed(list(enumerate(obj))):
+                    stack.append((val, ui_handle, f"[{i}]", is_kids_array))
+
+        # --- PHASE 2: Orphan Recovery (Matching _resolve_orphans) ---
+        found_new_orphans = False
+        current_deferred = deferred[:]
+        deferred.clear()
+
+        for ui_handle, obj, n in current_deferred:
+            if obj.objgen in registry:
+                # Happy path: Page was found in /Kids, turn placeholder into a Jump
+                adapter.resolve_deferred(ui_handle, registry[obj.objgen], n, is_orphan=False)
+            else:
+                # Orphan path: Page is broken/missing, "promote" it and resume DFS
+                found_new_orphans = True
+                registry[obj.objgen] = ui_handle
+                adapter.resolve_deferred(ui_handle, obj, n, is_orphan=True)
+                
+                # Push children to the stack so Phase 1 starts again
+                for key, val in reversed(sorted(obj.items(), key=sort_pdf_keys)):
+                    stack.append((val, ui_handle, str(key), False))
+
+        if not found_new_orphans and not stack:
             break
+

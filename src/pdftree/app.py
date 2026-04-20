@@ -15,7 +15,7 @@ from textual.widgets import Input, Label, RichLog
 from textual.widgets import Tree as TextualTree
 from textual.widgets.tree import TreeNode
 
-from .pdf_utils import JumpReference, build_tree, is_content_stream
+from .pdf_utils import JumpReference, DeferredJumpReference, is_content_stream, walk_pdf, TreeAdapter
 from .screens import HelpScreen, PromptScreen, UnsavedChangesScreen
 from .tree_utils import (
     expand_to,
@@ -555,12 +555,10 @@ class PDFTreeApp(App):
         try:
             self.pdf = pikepdf.Pdf.open(self.pdf_path)
             with self.app.batch_update():
-                build_tree(
-                    self.pdf.trailer,
-                    tree.root,
-                    node_registry=self.obj_to_node,
-                    name="Trailer",
-                )
+                # --- NEW ADAPTER WIRING ---
+                adapter = TextualTreeAdapter(tree.root, self.obj_to_node)
+                walk_pdf(self.pdf.trailer, adapter, name="Trailer")
+                # --------------------------
         except Exception as e:
             tree.root.add_leaf(f"[bold red]Fatal Error opening PDF: {e}[/bold red]")
 
@@ -653,6 +651,72 @@ class PDFTreeApp(App):
             self.call_after_refresh(lambda: tree.select_node(pages_node))
             tree.focus()
 
+
+class TextualTreeAdapter(TreeAdapter):
+    def __init__(self, tree_root, registry):
+        self.tree_root = tree_root
+        self.registry = registry
+
+    def create_node(self, parent, pdf_obj, name, label_type):
+        p = parent or self.tree_root
+        is_ind = getattr(pdf_obj, "is_indirect", False)
+        obj_label = f"(Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})" if is_ind else ""
+        
+        label = Text()
+        # Apply your original TUI colors based on the node type
+        if label_type == "Dictionary":
+            label.append(name, style="bold blue")
+            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            label.append(f" Dict[{len(pdf_obj)}]", style="dim")
+        elif label_type == "Array":
+            label.append(name, style="bold green")
+            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            label.append(f" Array[{len(pdf_obj)}]", style="dim")
+        elif label_type == "Stream":
+            label.append(name, style="bold red")
+            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            label.append(" Stream", style="dim")
+        else:
+            val_str = str(pdf_obj)
+            if len(val_str) > 60: val_str = val_str[:57] + "..."
+            label.append(name, style="bold cyan")
+            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            label.append(f": {val_str}")
+
+        if label_type in ("Dictionary", "Array", "Stream"):
+            return p.add(label, data=pdf_obj)
+        else:
+            return p.add_leaf(label, data=pdf_obj)
+
+    def create_jump(self, parent, target_node, name):
+        target_obj = target_node.data
+        label = Text.from_markup(f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]")
+        parent.add_leaf(label, data=JumpReference(target_node))
+
+    def create_deferred(self, parent, pdf_obj, name):
+        label = Text.from_markup(f"[dim underline italic]{name}: ↪ [Deferred] Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]")
+        return parent.add(label, data=DeferredJumpReference(pdf_obj, name))
+
+    def resolve_deferred(self, ui_node, target, name, is_orphan):
+        if is_orphan:
+            # Orphan Path: Convert the placeholder into a real expandable Dictionary node
+            pdf_obj = target
+            label = Text()
+            label.append(name, style="bold blue")
+            label.append(f" (Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})", style="dim yellow")
+            label.append(f" Dict[{len(pdf_obj)}]", style="dim")
+            
+            ui_node.set_label(label)
+            ui_node.data = pdf_obj
+            ui_node.allow_expand = True
+        else:
+            # Happy Path: Convert the placeholder into a Jump link
+            target_obj = target.data
+            label = Text.from_markup(f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]")
+            
+            ui_node.set_label(label)
+            ui_node.data = JumpReference(target)
+            ui_node.allow_expand = False
 
 def main():
     if len(sys.argv) < 2 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
