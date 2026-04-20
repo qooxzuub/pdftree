@@ -1,5 +1,4 @@
 import pikepdf
-from rich.text import Text
 from textual.widgets.tree import TreeNode
 
 
@@ -9,7 +8,9 @@ def is_content_stream(stream: pikepdf.Stream, name: str, parent_name: str = "") 
     filters = stream.get("/Filter")
     if filters is not None:
         filter_list = (
-            [str(filters)] if not isinstance(filters, pikepdf.Array) else [str(f) for f in filters]
+            [str(filters)]
+            if not isinstance(filters, pikepdf.Array)
+            else [str(f) for f in filters]
         )
         if any(f in image_filters for f in filter_list):
             return False
@@ -59,15 +60,24 @@ class DeferredJumpReference:
 
 class TreeAdapter:
     """Interface to be implemented by TUI and GUI."""
-    def create_node(self, parent, pdf_obj, name, label_type): pass
-    def create_jump(self, parent, target_node, name): pass
-    def create_deferred(self, parent, pdf_obj, name): pass
-    def resolve_deferred(self, deferred_node, target_node, name, is_orphan): pass
+
+    def create_node(self, parent, pdf_obj, name, label_type):
+        pass
+
+    def create_jump(self, parent, target_node, name):
+        pass
+
+    def create_deferred(self, parent, pdf_obj, name):
+        pass
+
+    def resolve_deferred(self, deferred_node, target_node, name, is_orphan):
+        pass
+
 
 def walk_pdf(pdf_root, adapter, name="Trailer"):
     registry = {}  # objgen -> UI Node handle
     deferred = []  # List of (UI handle, pdf_obj, name)
-    stack = [(pdf_root, None, name, False)] # (obj, ui_parent, name, is_kid)
+    stack = [(pdf_root, None, name, False)]  # (obj, ui_parent, name, is_kid)
 
     while True:
         # --- PHASE 1: Build down the tree ---
@@ -107,7 +117,7 @@ def walk_pdf(pdf_root, adapter, name="Trailer"):
                 for key, val in reversed(sorted(obj.items(), key=sort_pdf_keys)):
                     stack.append((val, ui_handle, str(key), False))
             elif isinstance(obj, pikepdf.Array):
-                is_kids_array = (n == "/Kids")
+                is_kids_array = n == "/Kids"
                 for i, val in reversed(list(enumerate(obj))):
                     stack.append((val, ui_handle, f"[{i}]", is_kids_array))
 
@@ -119,17 +129,18 @@ def walk_pdf(pdf_root, adapter, name="Trailer"):
         for ui_handle, obj, n in current_deferred:
             if obj.objgen in registry:
                 # Happy path: Page was found in /Kids, turn placeholder into a Jump
-                adapter.resolve_deferred(ui_handle, registry[obj.objgen], n, is_orphan=False)
+                adapter.resolve_deferred(
+                    ui_handle, registry[obj.objgen], n, is_orphan=False
+                )
             else:
                 # Orphan path: Page is broken/missing, "promote" it and resume DFS
                 found_new_orphans = True
                 registry[obj.objgen] = ui_handle
                 adapter.resolve_deferred(ui_handle, obj, n, is_orphan=True)
-                
+
                 # Push children to the stack so Phase 1 starts again
                 for key, val in reversed(sorted(obj.items(), key=sort_pdf_keys)):
                     stack.append((val, ui_handle, str(key), False))
 
         if not found_new_orphans and not stack:
             break
-

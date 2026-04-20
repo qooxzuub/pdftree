@@ -41,7 +41,9 @@ def rebuild_stream_label(node: TreeNode, new_length: int | None = None) -> None:
     label = Text()
     label.append(name, style="bold red")
     if is_ind:
-        label.append(f" (Obj {stream.objgen[0]}:{stream.objgen[1]})", style="dim yellow")
+        label.append(
+            f" (Obj {stream.objgen[0]}:{stream.objgen[1]})", style="dim yellow"
+        )
     label.append(" Stream", style="dim")
     if new_length is not None:
         label.append(f" {int(new_length)} bytes", style="dim")

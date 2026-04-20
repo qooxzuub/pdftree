@@ -15,7 +15,13 @@ from textual.widgets import Input, Label, RichLog
 from textual.widgets import Tree as TextualTree
 from textual.widgets.tree import TreeNode
 
-from .pdf_utils import JumpReference, DeferredJumpReference, is_content_stream, walk_pdf, TreeAdapter
+from .pdf_utils import (
+    JumpReference,
+    DeferredJumpReference,
+    is_content_stream,
+    walk_pdf,
+    TreeAdapter,
+)
 from .screens import HelpScreen, PromptScreen, UnsavedChangesScreen
 from .tree_utils import (
     expand_to,
@@ -96,7 +102,9 @@ class PDFTreeApp(App):
 
         # We prompt for a prefix because pikepdf appends the correct extension automatically
         self.push_screen(
-            PromptScreen("Image file prefix (extension added automatically):", "image_out"),
+            PromptScreen(
+                "Image file prefix (extension added automatically):", "image_out"
+            ),
             self._extract_image_callback,
         )
 
@@ -127,7 +135,9 @@ class PDFTreeApp(App):
                 "[red]Pillow is required for image extraction. Run: pip install Pillow[/red]"
             )
         except Exception as e:
-            self.query_one("#breadcrumb", Label).update(f"[red]Failed to extract image:[/red] {e}")
+            self.query_one("#breadcrumb", Label).update(
+                f"[red]Failed to extract image:[/red] {e}"
+            )
 
     # -------------------------------------------------------------------------
     # Normalize stream
@@ -263,7 +273,9 @@ class PDFTreeApp(App):
                 f"[green]Successfully saved {len(raw_bytes)} bytes to '{filename}'[/green]"
             )
         except Exception as e:
-            self.query_one("#breadcrumb", Label).update(f"[red]Failed to save file:[/red] {e}")
+            self.query_one("#breadcrumb", Label).update(
+                f"[red]Failed to save file:[/red] {e}"
+            )
 
     # -------------------------------------------------------------------------
     # Edit stream
@@ -287,7 +299,9 @@ class PDFTreeApp(App):
             with os.fdopen(fd, "wb") as f:
                 f.write(old_bytes)
         except Exception as e:
-            self.query_one("#breadcrumb", Label).update(f"[red]Error reading stream:[/red] {e}")
+            self.query_one("#breadcrumb", Label).update(
+                f"[red]Error reading stream:[/red] {e}"
+            )
             return
 
         editor_env = os.environ.get("EDITOR", "nano" if os.name != "nt" else "notepad")
@@ -380,7 +394,9 @@ class PDFTreeApp(App):
                 f"[green]Successfully saved modified PDF to '{filename}'[/green]"
             )
         except Exception as e:
-            self.query_one("#breadcrumb", Label).update(f"[red]Failed to save PDF:[/red] {e}")
+            self.query_one("#breadcrumb", Label).update(
+                f"[red]Failed to save PDF:[/red] {e}"
+            )
 
     # -------------------------------------------------------------------------
     # Help
@@ -445,7 +461,9 @@ class PDFTreeApp(App):
             page_num = int(value)
             num_pages = len(self.pdf.pages)
         except ValueError:
-            self.query_one("#breadcrumb", Label).update(f"[red]Invalid page number:[/red] {value}")
+            self.query_one("#breadcrumb", Label).update(
+                f"[red]Invalid page number:[/red] {value}"
+            )
             return
 
         if not (1 <= page_num <= num_pages):
@@ -494,14 +512,20 @@ class PDFTreeApp(App):
             if start_idx == -1:
                 search_sequence = all_nodes
             else:
-                search_sequence = all_nodes[start_idx + 1 :] + all_nodes[: start_idx + 1]
+                search_sequence = (
+                    all_nodes[start_idx + 1 :] + all_nodes[: start_idx + 1]
+                )
         else:
             if start_idx == -1:
                 search_sequence = all_nodes[::-1]
             else:
-                search_sequence = all_nodes[:start_idx][::-1] + all_nodes[start_idx:][::-1]
+                search_sequence = (
+                    all_nodes[:start_idx][::-1] + all_nodes[start_idx:][::-1]
+                )
 
-        match = next((n for n in search_sequence if query in n.label.plain.lower()), None)
+        match = next(
+            (n for n in search_sequence if query in n.label.plain.lower()), None
+        )
 
         if match:
             expand_to(match)
@@ -518,10 +542,14 @@ class PDFTreeApp(App):
 
     def compose(self) -> ComposeResult:
         with Horizontal():
-            yield PDFTree(f"[bold magenta]{self.pdf_path}[/bold magenta]", id="tree-pane")
+            yield PDFTree(
+                f"[bold magenta]{self.pdf_path}[/bold magenta]", id="tree-pane"
+            )
             with Vertical(id="right-pane"):
                 yield Label("Trailer", id="breadcrumb")
-                yield RichLog(id="details-pane", highlight=True, wrap=True, auto_scroll=False)
+                yield RichLog(
+                    id="details-pane", highlight=True, wrap=True, auto_scroll=False
+                )
         yield SearchInput(
             placeholder="Search nodes (Enter to jump, Esc or ctrl+g to cancel)...",
             id="search-bar",
@@ -604,7 +632,11 @@ class PDFTreeApp(App):
             if target:
                 expand_to(target)
                 self.call_after_refresh(self.do_jump_factory(tree, target))
-                log.write(Text.from_markup("[bold yellow]--- Jumped to Object ---[/bold yellow]"))
+                log.write(
+                    Text.from_markup(
+                        "[bold yellow]--- Jumped to Object ---[/bold yellow]"
+                    )
+                )
                 log.write(
                     Text.from_markup(
                         "[dim]Moved cursor to the original location of this object.[/dim]"
@@ -637,7 +669,9 @@ class PDFTreeApp(App):
                 log.write(Text.from_markup("[dim]First 5000 bytes as repr:[/dim]\n"))
                 log.write(repr(raw_bytes[:5000]))
             except Exception as e:
-                log.write(Text.from_markup(f"[bold red]Error reading stream:[/bold red] {e}"))
+                log.write(
+                    Text.from_markup(f"[bold red]Error reading stream:[/bold red] {e}")
+                )
 
     # -------------------------------------------------------------------------
     # Helpers
@@ -661,26 +695,31 @@ class TextualTreeAdapter(TreeAdapter):
         p = parent or self.tree_root
         is_ind = getattr(pdf_obj, "is_indirect", False)
         obj_label = f"(Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})" if is_ind else ""
-        
+
         label = Text()
         # Apply your original TUI colors based on the node type
         if label_type == "Dictionary":
             label.append(name, style="bold blue")
-            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            if obj_label:
+                label.append(f" {obj_label}", style="dim yellow")
             label.append(f" Dict[{len(pdf_obj)}]", style="dim")
         elif label_type == "Array":
             label.append(name, style="bold green")
-            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            if obj_label:
+                label.append(f" {obj_label}", style="dim yellow")
             label.append(f" Array[{len(pdf_obj)}]", style="dim")
         elif label_type == "Stream":
             label.append(name, style="bold red")
-            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            if obj_label:
+                label.append(f" {obj_label}", style="dim yellow")
             label.append(" Stream", style="dim")
         else:
             val_str = str(pdf_obj)
-            if len(val_str) > 60: val_str = val_str[:57] + "..."
+            if len(val_str) > 60:
+                val_str = val_str[:57] + "..."
             label.append(name, style="bold cyan")
-            if obj_label: label.append(f" {obj_label}", style="dim yellow")
+            if obj_label:
+                label.append(f" {obj_label}", style="dim yellow")
             label.append(f": {val_str}")
 
         if label_type in ("Dictionary", "Array", "Stream"):
@@ -690,11 +729,15 @@ class TextualTreeAdapter(TreeAdapter):
 
     def create_jump(self, parent, target_node, name):
         target_obj = target_node.data
-        label = Text.from_markup(f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]")
+        label = Text.from_markup(
+            f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]"
+        )
         parent.add_leaf(label, data=JumpReference(target_node))
 
     def create_deferred(self, parent, pdf_obj, name):
-        label = Text.from_markup(f"[dim underline italic]{name}: ↪ [Deferred] Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]")
+        label = Text.from_markup(
+            f"[dim underline italic]{name}: ↪ [Deferred] Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]}[/]"
+        )
         return parent.add(label, data=DeferredJumpReference(pdf_obj, name))
 
     def resolve_deferred(self, ui_node, target, name, is_orphan):
@@ -703,20 +746,25 @@ class TextualTreeAdapter(TreeAdapter):
             pdf_obj = target
             label = Text()
             label.append(name, style="bold blue")
-            label.append(f" (Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})", style="dim yellow")
+            label.append(
+                f" (Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})", style="dim yellow"
+            )
             label.append(f" Dict[{len(pdf_obj)}]", style="dim")
-            
+
             ui_node.set_label(label)
             ui_node.data = pdf_obj
             ui_node.allow_expand = True
         else:
             # Happy Path: Convert the placeholder into a Jump link
             target_obj = target.data
-            label = Text.from_markup(f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]")
-            
+            label = Text.from_markup(
+                f"[dim underline italic]{name}: ↪ Jump to Obj {target_obj.objgen[0]}:{target_obj.objgen[1]}[/]"
+            )
+
             ui_node.set_label(label)
             ui_node.data = JumpReference(target)
             ui_node.allow_expand = False
+
 
 def main():
     if len(sys.argv) < 2 or "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
