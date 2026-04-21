@@ -1,6 +1,10 @@
+import unicodedata
+
 from collections import defaultdict
 
 import pikepdf
+
+from .pdf_operators import ops
 
 
 def is_content_stream(stream: pikepdf.Stream, name: str, parent_name: str = "") -> bool:
@@ -155,3 +159,88 @@ def walk_pdf(pdf_root, adapter, name="Trailer"):
 
     # Attach the backlinks to the adapter so the GUI can find them later
     adapter.backlinks = backlinks
+
+
+def disassemble_content_stream(stream_obj):
+    lines = []
+    # pikepdf handles the heavy lifting of parsing operands and operators
+    # operands is a list (e.g., [10, 20]), operator is the command (e.g., "Td")
+    for operands, operator in pikepdf.parse_content_stream(stream_obj):
+        op_name = str(operator)
+
+        # Get the description from your 'ops' dictionary
+        # Note: using index [2] because of your new 3-tuple format
+        info = ops.get(op_name, ("unknown", "unknown", "Unknown operator"))
+        description = info[2]
+
+        # Format operands: strings need their parens back for valid syntax
+        formatted_ops = []
+        for arg in operands:
+            if isinstance(arg, pikepdf.String):
+                # Put the parens back so it's valid PDF syntax
+                formatted_ops.append(f"({str(arg)})")
+            else:
+                formatted_ops.append(str(arg))
+
+        ops_str = " ".join(formatted_ops)
+
+        # Align the output: Operands (Left), Operator (Center), Comment (Right)
+        line = f"{ops_str:<40} {op_name:<6} % {description}"
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def is_human_readable(s: str) -> bool:
+    """
+    Determines if a string is likely intended for human eyes.
+    Filters out binary blobs, encrypted data, and mojibake.
+    """
+    if not s:
+        return True
+
+    # PDF IDs often contain the null byte; text strings almost never do.
+    if "\x00" in s:
+        return False
+
+    unprintable_count = 0
+    for char in s:
+        cat = unicodedata.category(char)
+        # Cc: Control, Cs: Surrogate, Co: Private Use
+        if cat in ("Cc", "Cs", "Co"):
+            # We explicitly allow common whitespace
+            if char not in "\n\r\t":
+                unprintable_count += 1
+
+    # If the string is mostly garbage (unprintables), it's binary data.
+    # A 15% threshold allows for occasional weird characters in text.
+    if (unprintable_count / len(s)) > 0.15:
+        return False
+
+    return True
+
+
+def format_pdf_string(pdf_obj):
+    """
+    Finds the best human-readable representation of a PDF string.
+    Tries UTF-8, UTF-16, and Latin-1 before falling back to Hex.
+    """
+    try:
+        raw_bytes = bytes(pdf_obj)
+    except (TypeError, ValueError):
+        return str(pdf_obj)
+
+    # Encodings to try in order of likelihood/strictness
+    # latin-1 is the crucial fallback for 'Gauß' (0xDF)
+    encodings = ["utf-8", "utf-16-be", "latin-1"]
+
+    for enc in encodings:
+        try:
+            decoded = raw_bytes.decode(enc)
+            if is_human_readable(decoded):
+                return decoded
+        except (UnicodeDecodeError, ValueError):
+            continue
+
+    # If all decoders produce junk or fail, return the clean hex format
+    return f"<{raw_bytes.hex().upper()}>"

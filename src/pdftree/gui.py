@@ -125,6 +125,8 @@ class PDFTreeGUI(Gtk.Window):
         self.tree_view.connect("button-press-event", self.events.on_tree_right_click)
         self.tree_view.connect("row-activated", self.events.on_tree_row_activated)
 
+        self.content_view.connect("move-cursor", self.events.on_stream_cursor_moved)
+
         self.search_entry.connect("search-changed", self.events.on_search_changed)
         self.search_entry.connect("next-match", self.events.on_search_next)
         self.search_entry.connect("previous-match", self.events.on_search_prev)
@@ -132,7 +134,13 @@ class PDFTreeGUI(Gtk.Window):
         self.connect("destroy", Gtk.main_quit)
 
         self.populate_ui_tree()
+
+        self.statusbar = Gtk.Statusbar()
+        # pack_end puts it at the very bottom of the window
+        self.main_vbox.pack_end(self.statusbar, False, False, 0)
+
         self.show_all()
+
         self.actions.expand_to_pages()
 
     # ==========================================
@@ -159,6 +167,27 @@ class PDFTreeGUI(Gtk.Window):
         item_quit = Gtk.MenuItem(label="E_xit (Ctrl+q)")
         item_quit.connect("activate", Gtk.main_quit)
         append_menuitems([item_save, item_quit], file_menu)
+
+        # View Menu (Top Bar only)
+        view_menu = Gtk.Menu()
+        view_item = Gtk.MenuItem(label="_View")
+        view_item.set_submenu(view_menu)
+        append_menuitems([view_item], self.menubar)
+
+        # Toggle for Disassembly
+        self.item_disassemble = Gtk.CheckMenuItem(label="_Disassemble content streams")
+        self.item_disassemble.set_active(True)  # Default to ON
+        self.item_disassemble.connect(
+            "toggled", self.actions.action_checkbox_toggle_and_refresh
+        )
+        # Toggle for Disassembly
+        self.item_preview_images = Gtk.CheckMenuItem(label="_Image previews")
+        self.item_preview_images.set_active(True)  # Default to ON
+        self.item_preview_images.connect(
+            "toggled", self.actions.action_checkbox_toggle_and_refresh
+        )
+
+        append_menuitems([self.item_disassemble, self.item_preview_images], view_menu)
 
         # Action Menu (Shared between Top Bar and Context Menu)
         action_menu = Gtk.Menu()
@@ -188,6 +217,16 @@ class PDFTreeGUI(Gtk.Window):
 
         # Required so the context menu items are visible when popped up
         self.context_menu.show_all()
+
+    @property
+    def disassemble_mode(self):
+        """Helper to check the menu state from other parts of the app."""
+        return self.item_disassemble.get_active()
+
+    @property
+    def preview_images_mode(self):
+        """Helper to check the menu state from other parts of the app."""
+        return self.item_preview_images.get_active()
 
     def populate_ui_tree(self):
         self.adapter = GtkAdapter(self.store)

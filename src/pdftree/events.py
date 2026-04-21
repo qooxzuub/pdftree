@@ -1,6 +1,11 @@
 import gi
+from pikepdf.models import PdfImage
+from gi.repository import GdkPixbuf
+import io
 
 from .pdf_utils import JumpReference
+from .pdf_utils import is_content_stream, disassemble_content_stream
+from .pdf_operators import ops
 
 import pikepdf
 
@@ -157,6 +162,7 @@ class EventHandler:
 
         # 2. Update Details vs Content Split
         pdf_obj = model[treeiter][1]
+        name = model[treeiter][3]
         meta_buf = self.app.metadata_view.get_buffer()
         content_buf = self.app.content_view.get_buffer()
 
@@ -166,54 +172,18 @@ class EventHandler:
         if hasattr(pdf_obj, "objgen") and pdf_obj.is_indirect:
             links = self.app.adapter.backlinks.get(pdf_obj.objgen, [])
             if links:
-                meta_text += "\n--- Referenced By ---\n"
+                meta_text += f"\n--- Referenced By ({len(links)}) ---\n"
                 for source_id, key in sorted(links):
                     meta_text += f"• {source_id} via {key}\n"
 
         meta_buf.set_text(meta_text)
         content_buf.set_text("")  # Clear content by default
 
+        # 1. Clear status bar
+        self.app.statusbar.pop(0)
+
         if isinstance(pdf_obj, pikepdf.Stream):
-            try:
-                meta_buf.set_text(f"Stream Dictionary:\n{str(pdf_obj)}")
-
-                # --- IMAGE PREVIEW ROUTINE ---
-                if str(pdf_obj.get("/Subtype", "")) == "/Image":
-                    try:
-                        from pikepdf.models import PdfImage
-                        from gi.repository import GdkPixbuf
-                        import io
-
-                        # Convert PDF stream -> PIL Image -> PNG Bytes -> Gdk Pixbuf
-                        pdf_img = PdfImage(pdf_obj)
-                        pil_img = pdf_img.as_pil_image()
-
-                        byte_stream = io.BytesIO()
-                        pil_img.save(byte_stream, format="PNG")
-                        byte_stream.seek(0)
-
-                        loader = GdkPixbuf.PixbufLoader.new_with_type("png")
-                        loader.write(byte_stream.read())
-                        loader.close()
-
-                        self.app.image_view.set_from_pixbuf(loader.get_pixbuf())
-                        self.app.content_stack.set_visible_child_name("image")
-                    except Exception as e:
-                        content_buf.set_text(
-                            f"Image preview failed (ensure Pillow is installed):\n{e}"
-                        )
-                        self.app.content_stack.set_visible_child_name("text")
-
-                # --- TEXT PREVIEW ROUTINE ---
-                else:
-                    content = pdf_obj.read_bytes().decode("utf-8", errors="replace")
-                    content_buf.set_text(content)
-                    self.app.content_stack.set_visible_child_name("text")
-
-            except Exception as e:
-                content_buf.set_text(f"Error reading stream: {e}")
-                self.app.content_stack.set_visible_child_name("text")
-
+            self._handle_stream(pdf_obj, treeiter, model, name, content_buf, meta_buf)
         elif isinstance(pdf_obj, JumpReference):
             meta_buf.set_text(
                 "Jump Reference\nFollows an indirect object reference to another part of the tree.\n"
@@ -221,3 +191,95 @@ class EventHandler:
             )
 
             self.app.content_stack.set_visible_child_name("text")
+
+    def _handle_stream(self, pdf_obj, treeiter, model, name, content_buf, meta_buf):
+        parent_iter = model.iter_parent(treeiter)
+        parent_name = model[parent_iter][3] if parent_iter else ""
+        content_stream_q = is_content_stream(pdf_obj, name, parent_name)
+        image_q = str(pdf_obj.get("/Subtype", "")) == "/Image"
+
+        # 1. IMAGE PREVIEW PATH
+        if self.app.preview_images_mode and image_q:
+            try:
+                pdf_img = PdfImage(pdf_obj)
+                pil_img = pdf_img.as_pil_image()
+                byte_stream = io.BytesIO()
+                pil_img.save(byte_stream, format="PNG")
+                byte_stream.seek(0)
+                loader = GdkPixbuf.PixbufLoader.new_with_type("png")
+                loader.write(byte_stream.read())
+                loader.close()
+
+                self.app.image_view.set_from_pixbuf(loader.get_pixbuf())
+                self.app.content_stack.set_visible_child_name("image")
+                self.app.statusbar.push(0, "Stream Mode: Image, Preview")
+                return  # SUCCESS: Stop here
+            except Exception as e:
+                # Fallback to text if preview fails
+                content_buf.set_text(f"Image preview failed: {e}")
+                self.app.content_stack.set_visible_child_name("text")
+
+        # 2. DISASSEMBLY PATH
+        if self.app.disassemble_mode and content_stream_q:
+            text = disassemble_content_stream(pdf_obj)
+            content_buf.set_text(text)
+            self.app.content_stack.set_visible_child_name("text")
+            self.app.statusbar.push(0, "Stream Mode: Content, Disassembly")
+            return  # SUCCESS: Stop here
+
+        # 3. RAW FALLBACK PATH (Always last)
+        try:
+            meta_buf.set_text(f"Stream Dictionary:\n{str(pdf_obj)}")
+
+            # Determine status label
+            status = "Stream Mode: Raw"
+            if content_stream_q:
+                status = "Stream Mode: Content, Raw"
+            elif image_q:
+                status = "Stream Mode: Image, Raw"
+            self.app.statusbar.push(0, status)
+
+            # Try to get uncompressed bytes first
+            try:
+                content_bytes = pdf_obj.read_bytes()
+                content = content_bytes.decode("utf-8", errors="replace")
+            except (pikepdf.PdfError, NotImplementedError) as e:
+                # Handles JBIG2, JPX, or other unsupported filters
+                content_bytes = pdf_obj.read_raw_bytes()
+
+                # Truncate to prevent GUI freeze on massive binary streams
+                preview_length = 2000
+                byte_preview = repr(content_bytes[:preview_length])
+                if len(content_bytes) > preview_length:
+                    byte_preview += f"\n\n... [TRUNCATED {len(content_bytes) - preview_length} BYTES]"
+
+                content = f"<Unfilterable Stream: {e}>\n<Showing Raw Encoded Data>\n\n{byte_preview}"
+
+            content_buf.set_text(content)
+            self.app.content_stack.set_visible_child_name("text")
+
+        except Exception as e:
+            content_buf.set_text(f"Error reading stream: {e}")
+            self.app.content_stack.set_visible_child_name("text")
+
+    def on_stream_cursor_moved(self, textview, step, count, extend_selection):
+        # Get the current line text
+        buffer = textview.get_buffer()
+        insert_iter = buffer.get_iter_at_mark(buffer.get_insert())
+        start = insert_iter.copy()
+        start.set_line_offset(0)
+        end = insert_iter.copy()
+        end.forward_to_line_end()
+        line_text = buffer.get_text(start, end, False)
+
+        # Simple check: find the operator in the line (it's between the operands and %)
+        parts = line_text.split("%")
+        if len(parts) > 0:
+            content = parts[0].strip().split()
+            if content:
+                op = content[-1]  # The last word before the % is the operator
+                if op in ops:
+                    op_grammar, op_content_type, desc = ops[op]
+                    self.app.statusbar.push(
+                        0, f"[{op_grammar}/{op_content_type}] {op}: {desc}"
+                    )

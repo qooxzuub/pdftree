@@ -381,3 +381,11 @@ class ActionHandler:
                 "Normalization Failed",
                 f"This might not be a valid content stream:\n{str(e)}",
             )
+
+    def action_checkbox_toggle_and_refresh(self, checkmenuitem):
+        """Refreshes the current view when a view mode is toggled."""
+        # Trigger a refresh of the right-hand pane
+        selection = self.app.tree_view.get_selection()
+        model, treeiter = selection.get_selected()
+        if treeiter:
+            self.app.events.on_selection_changed(selection)

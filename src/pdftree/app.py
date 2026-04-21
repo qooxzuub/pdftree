@@ -694,7 +694,9 @@ class TextualTreeAdapter(TreeAdapter):
     def create_node(self, parent, pdf_obj, name, label_type):
         p = parent or self.tree_root
         is_ind = getattr(pdf_obj, "is_indirect", False)
-        obj_label = f"(Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})" if is_ind else ""
+        obj_label = ""
+        if is_ind:
+            obj_label = f"(Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})"
 
         label = Text()
         # Apply your original TUI colors based on the node type
@@ -723,9 +725,14 @@ class TextualTreeAdapter(TreeAdapter):
             label.append(f": {val_str}")
 
         if label_type in ("Dictionary", "Array", "Stream"):
-            return p.add(label, data=pdf_obj)
+            ui_handle = p.add(label, data=pdf_obj)
         else:
-            return p.add_leaf(label, data=pdf_obj)
+            ui_handle = p.add_leaf(label, data=pdf_obj)
+
+        if is_ind:
+            self.registry[pdf_obj.objgen] = ui_handle
+
+        return ui_handle
 
     def create_jump(self, parent, target_node, name):
         target_obj = target_node.data

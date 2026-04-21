@@ -1,8 +1,9 @@
 import html
 
+import pikepdf
 from collections import defaultdict
 
-from .pdf_utils import TreeAdapter, JumpReference
+from .pdf_utils import TreeAdapter, JumpReference, format_pdf_string
 
 
 class GtkAdapter(TreeAdapter):
@@ -48,7 +49,6 @@ class GtkAdapter(TreeAdapter):
         raw_obj_label = (
             f" (Obj {pdf_obj.objgen[0]}:{pdf_obj.objgen[1]})" if is_ind else ""
         )
-
         if label_type == "Dictionary":
             markup = f"<span color='#729fcf'><b>{name}</b></span>{obj_label} <span color='gray'>Dict[{len(pdf_obj)}]</span>"
             raw_text = f"{name}{raw_obj_label} Dict[{len(pdf_obj)}]"
@@ -58,11 +58,21 @@ class GtkAdapter(TreeAdapter):
         elif label_type == "Stream":
             markup = f"<span color='#ef2929'><b>{name}</b></span>{obj_label} <span color='gray'>Stream</span>"
             raw_text = f"{name}{raw_obj_label} Stream"
+        elif isinstance(pdf_obj, (str, pikepdf.String)):
+            raw_val_formatted = format_pdf_string(pdf_obj)
+            raw_val_to_show = (
+                raw_val_formatted
+                if len(raw_val_formatted) < 60
+                else raw_val_formatted[:60] + "…"
+            )
+            val_str = html.escape(raw_val_to_show)
+            markup = f"<span color='#cc9999'><b>{name}</b></span>{obj_label}: {val_str} <span color='gray'>String</span>"
+            raw_text = f"{name}{raw_obj_label}: {raw_val_to_show} ---- {html.escape(str(pdf_obj)[:60])}"
         else:
             raw_val = str(pdf_obj)[:60]
             val_str = html.escape(raw_val)
             markup = f"<span color='#34e2e2'><b>{name}</b></span>: {val_str}"
-            raw_text = f"{name}: {raw_val}"
+            raw_text = f"{name}{raw_obj_label}: {raw_val}"
 
         new_iter = self.store.append(parent_iter, [markup, pdf_obj, raw_text, name])
         if is_ind:

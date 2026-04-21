@@ -163,3 +163,16 @@ async def test_quit_with_unsaved_changes(simple_pdf):
 
         # The modal screen should be active instead of exiting
         assert "UnsavedChangesScreen" in type(app.screen).__name__
+
+
+@pytest.mark.asyncio
+async def test_obj_to_node_populated_after_mount(simple_pdf):
+    """Regression test: TextualTreeAdapter must populate obj_to_node for page jumps to work."""
+    app = PDFTreeApp(str(simple_pdf))
+    async with app.run_test():
+        assert len(app.obj_to_node) > 0, "obj_to_node is empty — registry not wired up"
+        # Every page object must have an entry
+        for page in app.pdf.pages:
+            assert page.objgen in app.obj_to_node, (
+                f"Page {page.objgen} missing from obj_to_node"
+            )
