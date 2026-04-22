@@ -21,6 +21,7 @@ class PDFTreeGUI(Gtk.Window):
         self.set_default_size(1200, 700)
         self.actions = ActionHandler(self)
         self.events = EventHandler(self)
+        self.pdf_path = pdf_path
 
         try:
             self.pdf = pikepdf.Pdf.open(pdf_path)
@@ -174,20 +175,31 @@ class PDFTreeGUI(Gtk.Window):
         view_item.set_submenu(view_menu)
         append_menuitems([view_item], self.menubar)
 
-        # Toggle for Disassembly
+        # View Toggles
         self.item_disassemble = Gtk.CheckMenuItem(label="_Disassemble content streams")
         self.item_disassemble.set_active(True)  # Default to ON
         self.item_disassemble.connect(
             "toggled", self.actions.action_checkbox_toggle_and_refresh
         )
-        # Toggle for Disassembly
         self.item_preview_images = Gtk.CheckMenuItem(label="_Image previews")
         self.item_preview_images.set_active(True)  # Default to ON
         self.item_preview_images.connect(
             "toggled", self.actions.action_checkbox_toggle_and_refresh
         )
+        self.item_preview_pages = Gtk.CheckMenuItem(label="_Page previews")
+        self.item_preview_pages.set_active(True)  # Default to ON
+        self.item_preview_pages.connect(
+            "toggled", self.actions.action_checkbox_toggle_and_refresh
+        )
 
-        append_menuitems([self.item_disassemble, self.item_preview_images], view_menu)
+        append_menuitems(
+            [
+                self.item_disassemble,
+                self.item_preview_images,
+                self.item_preview_pages,
+            ],
+            view_menu,
+        )
 
         # Action Menu (Shared between Top Bar and Context Menu)
         action_menu = Gtk.Menu()
@@ -227,6 +239,11 @@ class PDFTreeGUI(Gtk.Window):
     def preview_images_mode(self):
         """Helper to check the menu state from other parts of the app."""
         return self.item_preview_images.get_active()
+
+    @property
+    def preview_pages_mode(self):
+        """Helper to check the menu state from other parts of the app."""
+        return self.item_preview_pages.get_active()
 
     def populate_ui_tree(self):
         self.adapter = GtkAdapter(self.store)

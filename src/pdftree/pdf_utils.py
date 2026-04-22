@@ -1,3 +1,9 @@
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf, GLib  # noqa: E402
+
 import unicodedata
 
 from collections import defaultdict
@@ -5,6 +11,8 @@ from collections import defaultdict
 import pikepdf
 
 from .pdf_operators import ops
+
+import pypdfium2 as pdfium
 
 
 def is_content_stream(stream: pikepdf.Stream, name: str, parent_name: str = "") -> bool:

@@ -12,6 +12,7 @@ dependencies = [
     "pikepdf>=10.0.0",
     "textual>=8.2.3",
     "rich>=14.2.0",
+    "pypdfium2",
 ]
 
 [project.optional-dependencies]

@@ -1,13 +1,17 @@
 import gi
 from pikepdf.models import PdfImage
-from gi.repository import GdkPixbuf
+from gi.repository import GdkPixbuf, GLib
 import io
 
 from .pdf_utils import JumpReference
-from .pdf_utils import is_content_stream, disassemble_content_stream
+from .pdf_utils import (
+    is_content_stream,
+    disassemble_content_stream,
+)
 from .pdf_operators import ops
 
 import pikepdf
+import pypdfium2 as pdfium
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk  # noqa: E402
@@ -182,7 +186,21 @@ class EventHandler:
         # 1. Clear status bar
         self.app.statusbar.pop(0)
 
-        if isinstance(pdf_obj, pikepdf.Stream):
+        is_page = (
+            isinstance(pdf_obj, pikepdf.Dictionary)
+            and hasattr(pdf_obj, "Type")
+            and pdf_obj.Type == pikepdf.Name("/Page")
+        )
+        page_idx = None
+        if is_page:
+            try:
+                page_idx = self.app.pdf.pages.index(pdf_obj)
+            except ValueError:
+                pass
+
+        if is_page and page_idx is not None:
+            self._handle_page(pdf_obj, page_idx, content_buf, meta_buf)
+        elif isinstance(pdf_obj, pikepdf.Stream):
             self._handle_stream(pdf_obj, treeiter, model, name, content_buf, meta_buf)
         elif isinstance(pdf_obj, JumpReference):
             meta_buf.set_text(
@@ -191,6 +209,75 @@ class EventHandler:
             )
 
             self.app.content_stack.set_visible_child_name("text")
+
+    def _handle_page(self, pdf_obj, page_idx, content_buf, meta_buf):
+        """Renders a PDF page fit to the current widget size."""
+        if not getattr(self.app, "preview_pages_mode", True):
+            self.app.statusbar.push(0, f"Page {page_idx + 1}, text mode")
+            content_buf.set_text(f"Page {page_idx + 1} repr: \n\n{pdf_obj}")
+            self.app.content_stack.set_visible_child_name("text")
+            return
+
+        try:
+            self.app.statusbar.push(0, f"Page {page_idx + 1}, preview mode")
+            self._render_page(pdf_obj, page_idx, content_buf, meta_buf)
+            self.app.content_stack.set_visible_child_name("image")
+        except Exception as e:
+            content_buf.set_text(f"Page rendering failed: {e}\n\n{pdf_obj}")
+            self.app.content_stack.set_visible_child_name("text")
+
+    def _render_page(self, pdf_obj, page_idx, content_buf, meta_buf):
+        pixbuf = self._get_render_page_pixbuf(page_idx)
+        self.app.image_view.set_from_pixbuf(pixbuf)
+
+    def _get_render_page_pixbuf(self, page_idx):
+        # 1. Get the target size from the widget
+        # We use the parent scroll window to know how much space we actually have
+        allocation = self.app.content_stack.get_allocation()
+        target_w = allocation.width - 20  # Tiny margin for scrollbars
+        target_h = allocation.height - 20
+
+        # 2. Open document and get page dimensions (points)
+        doc = pdfium.PdfDocument(self.app.pdf_path)
+        page = doc[page_idx]
+        width, height = page.get_size()  # Returns (width, height) in points
+
+        # 3. Calculate scale to fit (preserving aspect ratio)
+        # We find which dimension is the bottleneck
+        scale_w = target_w / width
+        scale_h = target_h / height
+        fit_scale = min(scale_w, scale_h)
+
+        # Fallback if widget isn't realized yet (e.g., width is 1 or less)
+        if fit_scale <= 0:
+            fit_scale = 1.5
+
+        # 4. Render at the calculated scale
+        bitmap = page.render(scale=fit_scale)
+
+        # ------
+        # G1. Get a PIL image (PDFium's to_pil is very efficient)
+        pil_img = bitmap.to_pil().convert("RGB")
+        width, height = pil_img.size
+        data = pil_img.tobytes()  # Raw pixel data (R,G,B,R,G,B...)
+
+        # G2. Create Pixbuf directly from raw bytes
+        # Note: has_alpha=False, bits_per_sample=8
+        pixbuf = GdkPixbuf.Pixbuf.new_from_data(
+            data,
+            GdkPixbuf.Colorspace.RGB,
+            False,
+            8,
+            width,
+            height,
+            width * 3,  # Rowstride (3 bytes per pixel for RGB)
+        )
+
+        # G3. CRITICAL: Prevent Python from garbage collecting 'data'
+        # GdkPixbuf doesn't copy the data; it points to it. If 'data' dies, the UI crashes.
+        pixbuf.raw_data = data
+        # -------
+        return pixbuf
 
     def _handle_stream(self, pdf_obj, treeiter, model, name, content_buf, meta_buf):
         parent_iter = model.iter_parent(treeiter)
